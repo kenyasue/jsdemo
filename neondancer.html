@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Bezier Dancer with Colorful Particles</title>
+    <!-- Tone.js ライブラリ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #444;
+            font-family: sans-serif;
+        }
+
+        canvas {
+            box-shadow: 0 0 50px rgba(0, 255, 255, 0.05);
+        }
+
+        #instruction {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            opacity: 0.5;
+            font-size: 12px;
+            color: #fff;
+            text-shadow: 0 0 5px #0ff;
+        }
+
+        /* スタートボタンのスタイル */
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            transition: opacity 0.5s;
+        }
+
+        #start-btn {
+            padding: 15px 40px;
+            font-size: 24px;
+            color: #0ff;
+            background: transparent;
+            border: 2px solid #0ff;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 0 15px #0ff, inset 0 0 15px #0ff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        #start-btn:hover {
+            background: rgba(0, 255, 255, 0.2);
+            box-shadow: 0 0 30px #0ff, inset 0 0 30px #0ff;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- スタート画面 -->
+    <div id="overlay">
+        <button id="start-btn">Click to Start Party</button>
+    </div>
+
+    <!-- 描画領域 -->
+    <canvas id="stage"></canvas>
+    <div id="instruction">Tone.js Music + Procedural Animation + Particles</div>
+
+    <script>
+        // ==========================================
+        // 1. ビジュアル設定 (Canvas)
+        // ==========================================
+        const canvas = document.getElementById('stage');
+        const ctx = canvas.getContext('2d');
+        let width, height, centerX, centerY;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            centerX = width / 2;
+            centerY = height / 2 + 60;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // ==========================================
+        // 2. パーティクルシステム
+        // ==========================================
+        const particles = [];
+
+        class Particle {
+            constructor(x, y, color, speed, size) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                // 全方向に飛び散る
+                const angle = Math.random() * Math.PI * 2;
+                const velocity = Math.random() * speed;
+                this.vx = Math.cos(angle) * velocity;
+                this.vy = Math.sin(angle) * velocity;
+
+                this.life = 1.0;
+                this.decay = Math.random() * 0.02 + 0.01; // 消える速さ
+                this.size = size;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+                this.size *= 0.96; // 徐々に小さく
+            }
+
+            draw(ctx) {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // パーティクル発生関数
+        function spawnParticles(x, y, count, speedBase, sizeBase, hueBase = null) {
+            for (let i = 0; i < count; i++) {
+                // 色相をランダムにしてカラフルに。指定がなければ完全ランダム
+                const hue = hueBase !== null ? hueBase + Math.random() * 60 - 30 : Math.random() * 360;
+                const color = `hsl(${hue}, 100%, 60%)`;
+
+                particles.push(new Particle(
+                    x,
+                    y,
+                    color,
+                    speedBase + Math.random() * 2,
+                    sizeBase + Math.random() * 3
+                ));
+            }
+        }
+
+        // ==========================================
+        // 3. 音楽設定 (Tone.js)
+        // ==========================================
+        let isPlaying = false;
+
+        // BPM設定
+        const BPM = 128; // 少しテンポアップ
+        Tone.Transport.bpm.value = BPM;
+
+        // シンセサイザーの準備
+        const kick = new Tone.MembraneSynth({
+            pitchDecay: 0.05,
+            octaves: 10,
+            oscillator: { type: "sine" },
+            envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 }
+        }).toDestination();
+
+        const bass = new Tone.MonoSynth({
+            oscillator: { type: "square" },
+            envelope: { attack: 0.1, decay: 0.3, sustain: 0.2, release: 2 },
+            filterEnvelope: { attack: 0.06, decay: 0.2, sustain: 0.5, baseFrequency: 200, octaves: 2.6 }
+        }).toDestination();
+        bass.volume.value = -6;
+
+        const hat = new Tone.MetalSynth({
+            frequency: 200,
+            envelope: { attack: 0.001, decay: 0.1, release: 0.01 },
+            harmonicity: 5.1,
+            modulationIndex: 32,
+            resonance: 4000,
+            octaves: 1.5
+        }).toDestination();
+        hat.volume.value = -12;
+
+        const synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 1 }
+        }).toDestination();
+        synth.volume.value = -10;
+
+        // --- シーケンス & イベント ---
+
+        // キック: 4つ打ち + 爆発エフェクト
+        const kickLoop = new Tone.Loop(time => {
+            kick.triggerAttackRelease("C1", "8n", time);
+
+            // 画面上のランダムな位置で爆発
+            Tone.Draw.schedule(() => {
+                if (canvas.width > 0) {
+                    // 背景用の大きな爆発
+                    spawnParticles(
+                        Math.random() * width,
+                        Math.random() * height,
+                        10, 8, 5
+                    );
+                }
+            }, time);
+        }, "4n");
+
+        // ベース
+        const bassSeq = new Tone.Sequence((time, note) => {
+            // "16n." (付点16分音符) を使用して、次の音(8n後)と重ならないようにする
+            // これにより "The time must be greater than..." エラーを防ぐ
+            if (note) bass.triggerAttackRelease(note, "16n.", time);
+        }, ["C2", "C2", "Eb2", "C2", "G1", "Bb1", "C2", "G1"], "8n");
+
+        // ハイハット
+        const hatLoop = new Tone.Loop(time => {
+            hat.triggerAttackRelease("32n", time, Math.random() * 0.5 + 0.5);
+        }, "16n");
+
+        // コード（和音）で華やかに
+        const chordLoop = new Tone.Loop(time => {
+            synth.triggerAttackRelease(["C4", "Eb4", "G4"], "8n", time);
+            // 和音のタイミングで中央から放射
+            Tone.Draw.schedule(() => {
+                if (canvas.width > 0) spawnParticles(centerX, centerY, 30, 15, 4, 180); // シアン系
+            }, time);
+        }, "1m");
+
+
+        // スタートボタンの処理
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            // AudioContextの開始
+            await Tone.start();
+
+            // 以前のスケジュールをクリア（エラー回避のため）
+            Tone.Transport.cancel();
+            Tone.Transport.stop();
+
+            // ループスケジューリング
+            kickLoop.start(0);
+            bassSeq.start(0);
+            hatLoop.start(0);
+            chordLoop.start("2m"); // 少し遅れてコードが入る
+
+            // 少し未来("+0.1")からスタートさせることで、計算遅延によるエラーを防ぐ
+            Tone.Transport.start("+0.1");
+
+            // UI更新
+            document.getElementById('overlay').style.opacity = 0;
+            setTimeout(() => {
+                document.getElementById('overlay').style.display = 'none';
+            }, 500);
+
+            isPlaying = true;
+        });
+
+
+        // ==========================================
+        // 4. アニメーションロジック
+        // ==========================================
+        function drawLimb(p1, p2, curveness, color, lineWidth = 6) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lineWidth;
+            ctx.lineCap = 'round';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = color;
+
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+
+            const controlX = midX - dy * curveness;
+            const controlY = midY + dx * curveness;
+
+            ctx.moveTo(p1.x, p1.y);
+            ctx.quadraticCurveTo(controlX, controlY, p2.x, p2.y);
+            ctx.stroke();
+        }
+
+        function drawHead(p, color) {
+            ctx.beginPath();
+            ctx.fillStyle = '#000';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = color;
+            ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function animate(time) {
+            // 残像処理: 暗く塗りつぶすが、完全に消さない
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.2)';
+            ctx.fillRect(0, 0, width, height);
+
+            // 加算合成モードON（光らせる）
+            ctx.globalCompositeOperation = 'lighter';
+
+            // --- パーティクル更新と描画 ---
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw(ctx);
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // --- ダンサー計算 ---
+            // Tone.Transport.state が 'started' の時だけ Tone.Transport.seconds を使う
+            // そうでない場合はパフォーマンスタイムを使う (停止中もアニメーションさせるため)
+            const t = (isPlaying && Tone.Transport.state === 'started') ? Tone.Transport.seconds : time * 0.001;
+            const beat = t * (BPM / 60) * Math.PI;
+
+            const bounce = Math.abs(Math.sin(beat)) * 20;
+            const sway = Math.sin(beat * 0.5) * 40; // 揺れ幅アップ
+
+            const hip = { x: centerX + sway, y: centerY - bounce };
+
+            const spineTop = { x: hip.x + Math.sin(beat * 0.5) * 20, y: hip.y - 110 };
+            const neck = { x: spineTop.x, y: spineTop.y - 25 };
+            const head = { x: neck.x + Math.sin(beat) * 8, y: neck.y - 35 };
+
+            const shoulderL = { x: spineTop.x - 35, y: spineTop.y + 5 };
+            const shoulderR = { x: spineTop.x + 35, y: spineTop.y + 5 };
+
+            // 腕: 動きを派手に
+            const elbowL = {
+                x: shoulderL.x - 55 + Math.sin(beat) * 25,
+                y: shoulderL.y + 40 + Math.cos(beat) * 25
+            };
+            const handL = {
+                x: elbowL.x - 35 + Math.sin(beat * 1.5) * 35,
+                y: elbowL.y + 35 + Math.cos(beat * 1.5) * 35
+            };
+
+            const elbowR = {
+                x: shoulderR.x + 55 + Math.sin(beat + Math.PI) * 25,
+                y: shoulderR.y - 40 + Math.cos(beat) * 25
+            };
+            const handR = {
+                x: elbowR.x + 35 + Math.cos(beat * 1.5) * 35,
+                y: elbowR.y - 35 + Math.sin(beat * 1.5) * 35
+            };
+
+            const stepL = Math.max(0, Math.sin(beat));
+            const stepR = Math.max(0, Math.sin(beat + Math.PI));
+
+            const kneeL = { x: hip.x - 35, y: hip.y + 90 - stepL * 30 };
+            const footL = { x: hip.x - 45, y: hip.y + 190 - stepL * 15 };
+            const kneeR = { x: hip.x + 35, y: hip.y + 90 - stepR * 30 };
+            const footR = { x: hip.x + 45, y: hip.y + 190 - stepR * 15 };
+
+
+            // --- 手と足からパーティクル常時放出 ---
+            if (isPlaying && canvas.width > 0) {
+                // 手（カラフル）
+                spawnParticles(handL.x, handL.y, 2, 2, 2);
+                spawnParticles(handR.x, handR.y, 2, 2, 2);
+
+                // 足（ステップを踏んだときだけ）
+                if (stepL > 0.8) spawnParticles(footL.x, footL.y, 3, 3, 3, 180); // シアン系
+                if (stepR > 0.8) spawnParticles(footR.x, footR.y, 3, 3, 3, 300); // マゼンタ系
+            }
+
+
+            // --- ダンサー描画 ---
+
+            const colorMain = '#00ffff';
+            const colorSub = '#ff00ff';
+            const colorCore = '#ffffff';
+
+            // ビートに合わせて発光強度変化
+            const pulse = 15 + Math.abs(Math.sin(beat * 4)) * 15;
+            ctx.shadowBlur = pulse;
+
+            drawLimb(hip, kneeR, -0.15, colorSub);
+            drawLimb(kneeR, footR, 0.1, colorSub);
+            drawLimb(hip, kneeL, 0.15, colorMain);
+            drawLimb(kneeL, footL, -0.1, colorMain);
+            drawLimb(hip, spineTop, 0.1, colorCore, 8);
+            drawLimb(shoulderR, elbowR, -0.2, colorSub);
+            drawLimb(elbowR, handR, 0.2, colorSub);
+            drawLimb(shoulderL, elbowL, 0.2, colorMain);
+            drawLimb(elbowL, handL, -0.2, colorMain);
+
+            ctx.beginPath();
+            ctx.moveTo(shoulderL.x, shoulderL.y);
+            ctx.lineTo(shoulderR.x, shoulderR.y);
+            ctx.strokeStyle = colorCore;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            drawHead(head, colorCore);
+
+            // 加算合成終了
+            ctx.globalCompositeOperation = 'source-over';
+
+            // 床の反射
+            if (canvas.width > 0 && canvas.height > 0) {
+                ctx.save();
+                ctx.translate(0, height);
+                ctx.scale(1, -0.4);
+                ctx.globalAlpha = 0.2;
+                // 反射にも加算合成を適用してキラキラさせる
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.drawImage(canvas, 0, 0);
+                ctx.restore();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        animate(0);
+    </script>
+
+</body>
+
+</html>
