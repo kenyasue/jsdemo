@@ -83,7 +83,7 @@
 
     <!-- 描画領域 -->
     <canvas id="stage"></canvas>
-    <div id="instruction">Tone.js Music + Procedural Animation + Particles</div>
+    <div id="instruction">Tone.js Music + Procedural Animation + Particles + Spotlights</div>
 
     <script>
         // ==========================================
@@ -176,7 +176,8 @@
 
         const bass = new Tone.MonoSynth({
             oscillator: { type: "square" },
-            envelope: { attack: 0.1, decay: 0.3, sustain: 0.2, release: 2 },
+            // Releaseを短くして、次の音とかぶりにくく修正
+            envelope: { attack: 0.1, decay: 0.3, sustain: 0.2, release: 0.8 },
             filterEnvelope: { attack: 0.06, decay: 0.2, sustain: 0.5, baseFrequency: 200, octaves: 2.6 }
         }).toDestination();
         bass.volume.value = -6;
@@ -219,13 +220,15 @@
         // ベース
         const bassSeq = new Tone.Sequence((time, note) => {
             // "16n." (付点16分音符) を使用して、次の音(8n後)と重ならないようにする
-            // これにより "The time must be greater than..." エラーを防ぐ
             if (note) bass.triggerAttackRelease(note, "16n.", time);
         }, ["C2", "C2", "Eb2", "C2", "G1", "Bb1", "C2", "G1"], "8n");
 
         // ハイハット
         const hatLoop = new Tone.Loop(time => {
-            hat.triggerAttackRelease("32n", time, Math.random() * 0.5 + 0.5);
+            // 【修正点】以前のコードでは引数の順序が間違っていました。
+            // 正: triggerAttackRelease(note, duration, time, velocity)
+            // 以前: triggerAttackRelease("32n", time, velocity) -> timeがduration扱い、velocityがtime扱いになってエラー発生
+            hat.triggerAttackRelease(200, "32n", time, Math.random() * 0.5 + 0.5);
         }, "16n");
 
         // コード（和音）で華やかに
@@ -243,7 +246,7 @@
             // AudioContextの開始
             await Tone.start();
 
-            // 以前のスケジュールをクリア（エラー回避のため）
+            // 以前のスケジュールをクリア
             Tone.Transport.cancel();
             Tone.Transport.stop();
 
@@ -251,9 +254,9 @@
             kickLoop.start(0);
             bassSeq.start(0);
             hatLoop.start(0);
-            chordLoop.start("2m"); // 少し遅れてコードが入る
+            chordLoop.start("2m");
 
-            // 少し未来("+0.1")からスタートさせることで、計算遅延によるエラーを防ぐ
+            // 少し未来からスタート
             Tone.Transport.start("+0.1");
 
             // UI更新
@@ -302,13 +305,151 @@
             ctx.stroke();
         }
 
+        // --- スポットライト描画関数 ---
+        function drawSpotlight(x, angle, hue, intensity) {
+            ctx.save();
+            ctx.translate(x, -50); // 画面上部外側から
+            ctx.rotate(angle);
+
+            // 光の長さ
+            const length = height * 1.5;
+            // 根元の幅
+            const widthTop = 10;
+            // 照射先の幅
+            const widthBottom = 300;
+
+            // グラデーション作成 (根元から先へ薄くなる)
+            const gradient = ctx.createLinearGradient(0, 0, 0, length);
+
+            // 加算合成用に色を作成
+            const colorStart = `hsla(${hue}, 100%, 70%, ${0.3 * intensity})`;
+            const colorEnd = `hsla(${hue}, 100%, 50%, 0)`;
+
+            gradient.addColorStop(0, colorStart);
+            gradient.addColorStop(0.2, `hsla(${hue}, 100%, 70%, ${0.1 * intensity})`);
+            gradient.addColorStop(1, colorEnd);
+
+            ctx.fillStyle = gradient;
+
+            // 台形のような形を描く
+            ctx.beginPath();
+            ctx.moveTo(-widthTop / 2, 0);
+            ctx.lineTo(widthTop / 2, 0);
+            ctx.lineTo(widthBottom / 2, length);
+            ctx.lineTo(-widthBottom / 2, length);
+            ctx.closePath();
+
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // 背景ダンサー描画用のヘルパー関数
+        function drawBackgroundDancer(centerX, centerY, scale, beatOffset, color, pulse) {
+            const t = (isPlaying && Tone.Transport.state === 'started') ? Tone.Transport.seconds : performance.now() * 0.001;
+            const beat = (t + beatOffset) * (BPM / 60) * Math.PI;
+
+            const bounce = Math.abs(Math.sin(beat)) * 20 * scale;
+            const sway = Math.sin(beat * 0.5) * 40 * scale;
+
+            const hip = { x: centerX + sway, y: centerY - bounce };
+            const spineTop = { x: hip.x + Math.sin(beat * 0.5) * 20 * scale, y: hip.y - 110 * scale };
+            const neck = { x: spineTop.x, y: spineTop.y - 25 * scale };
+            const head = { x: neck.x + Math.sin(beat) * 8 * scale, y: neck.y - 35 * scale };
+
+            const shoulderL = { x: spineTop.x - 35 * scale, y: spineTop.y + 5 * scale };
+            const shoulderR = { x: spineTop.x + 35 * scale, y: spineTop.y + 5 * scale };
+
+            const elbowL = {
+                x: shoulderL.x - (55 * scale) + Math.sin(beat) * (25 * scale),
+                y: shoulderL.y + (40 * scale) + Math.cos(beat) * (25 * scale)
+            };
+            const handL = {
+                x: elbowL.x - (35 * scale) + Math.sin(beat * 1.5) * (35 * scale),
+                y: elbowL.y + (35 * scale) + Math.cos(beat * 1.5) * (35 * scale)
+            };
+
+            const elbowR = {
+                x: shoulderR.x + (55 * scale) + Math.sin(beat + Math.PI) * (25 * scale),
+                y: shoulderR.y - (40 * scale) + Math.cos(beat) * (25 * scale)
+            };
+            const handR = {
+                x: elbowR.x + (35 * scale) + Math.cos(beat * 1.5) * (35 * scale),
+                y: elbowR.y - (35 * scale) + Math.sin(beat * 1.5) * (35 * scale)
+            };
+
+            const stepL = Math.max(0, Math.sin(beat));
+            const stepR = Math.max(0, Math.sin(beat + Math.PI));
+
+            const kneeL = { x: hip.x - 35 * scale, y: hip.y + (90 * scale) - stepL * (30 * scale) };
+            const footL = { x: hip.x - 45 * scale, y: hip.y + (190 * scale) - stepL * (15 * scale) };
+            const kneeR = { x: hip.x + 35 * scale, y: hip.y + (90 * scale) - stepR * (30 * scale) };
+            const footR = { x: hip.x + 45 * scale, y: hip.y + (190 * scale) - stepR * (15 * scale) };
+
+            const lineWidth = 6 * scale;
+            const headRadius = 18 * scale;
+
+            ctx.shadowBlur = pulse * scale;
+
+            drawLimb(hip, kneeR, -0.15, color, lineWidth);
+            drawLimb(kneeR, footR, 0.1, color, lineWidth);
+            drawLimb(hip, kneeL, 0.15, color, lineWidth);
+            drawLimb(kneeL, footL, -0.1, color, lineWidth);
+            drawLimb(hip, spineTop, 0.1, color, lineWidth + 2 * scale);
+            drawLimb(shoulderR, elbowR, -0.2, color, lineWidth);
+            drawLimb(elbowR, handR, 0.2, color, lineWidth);
+            drawLimb(shoulderL, elbowL, 0.2, color, lineWidth);
+            drawLimb(elbowL, handL, -0.2, color, lineWidth);
+
+            ctx.beginPath();
+            ctx.moveTo(shoulderL.x, shoulderL.y);
+            ctx.lineTo(shoulderR.x, shoulderR.y);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4 * scale;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.fillStyle = '#000';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4 * scale;
+            ctx.shadowBlur = 25 * scale;
+            ctx.shadowColor = color;
+            ctx.arc(head.x, head.y, headRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
         function animate(time) {
-            // 残像処理: 暗く塗りつぶすが、完全に消さない
+            // 残像処理
             ctx.fillStyle = 'rgba(5, 5, 5, 0.2)';
             ctx.fillRect(0, 0, width, height);
 
+            // Tone.Transport.state が 'started' の時だけ Tone.Transport.seconds を使う
+            const t = (isPlaying && Tone.Transport.state === 'started') ? Tone.Transport.seconds : time * 0.001;
+            const beat = t * (BPM / 60) * Math.PI;
+
+            // ビートに合わせて発光強度変化
+            const pulse = 15 + Math.abs(Math.sin(beat * 4)) * 15;
+            // スポットライト用のゆっくりした変化
+            const slowTime = t * 0.5;
+
             // 加算合成モードON（光らせる）
             ctx.globalCompositeOperation = 'lighter';
+
+            // --- スポットライト描画 ---
+            // 5本のスポットライト
+            const numSpots = 5;
+            for (let i = 0; i < numSpots; i++) {
+                // 配置
+                const x = width * (0.1 + i * 0.2);
+                // 角度スイング (個別に位相をずらす)
+                const angle = Math.sin(slowTime + i) * 0.5;
+                // 色 (時間で変化 + 個体差)
+                const hue = (t * 20 + i * 50) % 360;
+                // 強度 (ビートに合わせてピカピカ)
+                const intensity = 0.5 + Math.sin(beat * 4 + i) * 0.5;
+
+                drawSpotlight(x, angle, hue, intensity);
+            }
 
             // --- パーティクル更新と描画 ---
             for (let i = particles.length - 1; i >= 0; i--) {
@@ -320,14 +461,26 @@
                 }
             }
 
-            // --- ダンサー計算 ---
-            // Tone.Transport.state が 'started' の時だけ Tone.Transport.seconds を使う
-            // そうでない場合はパフォーマンスタイムを使う (停止中もアニメーションさせるため)
-            const t = (isPlaying && Tone.Transport.state === 'started') ? Tone.Transport.seconds : time * 0.001;
-            const beat = t * (BPM / 60) * Math.PI;
+            // --- 背景ダンサー描画 ---
+            const numBackgroundDancers = 15;
+            for (let i = 0; i < numBackgroundDancers; i++) {
+                const seed = i * 132.1;
+                const bgX = width * ((Math.sin(seed) + 1) / 2 * 0.8 + 0.1);
+                const bgY = height * ((Math.cos(seed) + 1) / 2 * 0.3 + 0.3);
 
+                const scale = 0.2 + (Math.sin(seed * 2) + 1) * 0.15;
+                const beatOffset = seed;
+                const hue = (t * 10 + seed) % 360;
+                const alpha = 0.1 + scale * 0.3;
+                const color = `hsla(${hue}, 80%, 60%, ${alpha})`;
+
+                drawBackgroundDancer(bgX, bgY, scale, beatOffset, color, pulse);
+            }
+
+
+            // --- メインダンサー計算 ---
             const bounce = Math.abs(Math.sin(beat)) * 20;
-            const sway = Math.sin(beat * 0.5) * 40; // 揺れ幅アップ
+            const sway = Math.sin(beat * 0.5) * 40;
 
             const hip = { x: centerX + sway, y: centerY - bounce };
 
@@ -338,7 +491,6 @@
             const shoulderL = { x: spineTop.x - 35, y: spineTop.y + 5 };
             const shoulderR = { x: spineTop.x + 35, y: spineTop.y + 5 };
 
-            // 腕: 動きを派手に
             const elbowL = {
                 x: shoulderL.x - 55 + Math.sin(beat) * 25,
                 y: shoulderL.y + 40 + Math.cos(beat) * 25
@@ -366,26 +518,20 @@
             const footR = { x: hip.x + 45, y: hip.y + 190 - stepR * 15 };
 
 
-            // --- 手と足からパーティクル常時放出 ---
+            // --- パーティクル放出 ---
             if (isPlaying && canvas.width > 0) {
-                // 手（カラフル）
                 spawnParticles(handL.x, handL.y, 2, 2, 2);
                 spawnParticles(handR.x, handR.y, 2, 2, 2);
-
-                // 足（ステップを踏んだときだけ）
-                if (stepL > 0.8) spawnParticles(footL.x, footL.y, 3, 3, 3, 180); // シアン系
-                if (stepR > 0.8) spawnParticles(footR.x, footR.y, 3, 3, 3, 300); // マゼンタ系
+                if (stepL > 0.8) spawnParticles(footL.x, footL.y, 3, 3, 3, 180);
+                if (stepR > 0.8) spawnParticles(footR.x, footR.y, 3, 3, 3, 300);
             }
 
 
-            // --- ダンサー描画 ---
-
+            // --- メインダンサー描画 ---
             const colorMain = '#00ffff';
             const colorSub = '#ff00ff';
             const colorCore = '#ffffff';
 
-            // ビートに合わせて発光強度変化
-            const pulse = 15 + Math.abs(Math.sin(beat * 4)) * 15;
             ctx.shadowBlur = pulse;
 
             drawLimb(hip, kneeR, -0.15, colorSub);
@@ -416,8 +562,6 @@
                 ctx.translate(0, height);
                 ctx.scale(1, -0.4);
                 ctx.globalAlpha = 0.2;
-                // 反射にも加算合成を適用してキラキラさせる
-                ctx.globalCompositeOperation = 'lighter';
                 ctx.drawImage(canvas, 0, 0);
                 ctx.restore();
             }
