@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Solar System Architect - Mobile Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #020205;
+            color: white;
+            font-family: sans-serif;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        /* 常に表示されるスコアHUD */
+        .hud-score {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 15, 25, 0.7);
+            padding: 10px 20px;
+            border-radius: 999px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            pointer-events: none;
+            z-index: 20;
+            white-space: nowrap;
+        }
+
+        /* 折りたたみ可能な設定パネル */
+        .ui-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(15, 15, 25, 0.9);
+            padding: 20px;
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            width: 280px;
+            pointer-events: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            z-index: 30;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        .ui-panel.hidden-ui {
+            transform: translateY(150%) scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* UI切り替えボタン */
+        .ui-toggle-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: rgba(249, 115, 22, 0.8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 40;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            text-align: right;
+            font-family: 'Courier New', monospace;
+            color: rgba(255, 255, 255, 0.4);
+            pointer-events: none;
+            z-index: 5;
+            font-size: 10px;
+        }
+
+        .btn-active {
+            background: #ea580c !important;
+            border-color: #ffedd5 !important;
+        }
+
+        @media (max-width: 640px) {
+            .hud-score {
+                width: 90%;
+                font-size: 14px;
+                gap: 10px;
+                padding: 8px 15px;
+            }
+
+            .ui-panel {
+                width: calc(100% - 40px);
+                bottom: 80px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- スコアHUD (常に表示) -->
+    <div class="hud-score">
+        <div class="flex flex-col items-center">
+            <span class="text-[10px] text-gray-400 uppercase tracking-tighter">Score</span>
+            <span id="total-score" class="text-xl font-bold text-orange-400 leading-none">0</span>
+        </div>
+        <div class="h-8 w-[1px] bg-white/10"></div>
+        <div class="flex flex-col flex-1 min-w-[80px]">
+            <div class="flex justify-between text-[10px] mb-1">
+                <span class="text-gray-400">Harmony</span>
+                <span id="harmony-val" class="text-white">0%</span>
+            </div>
+            <div class="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                <div id="harmony-bar" class="bg-orange-500 h-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+        </div>
+        <div class="h-8 w-[1px] bg-white/10 hidden sm:block"></div>
+        <div class="hidden sm:flex flex-col items-end">
+            <span class="text-[10px] text-gray-500 uppercase tracking-tighter">High Score</span>
+            <span id="high-score" class="text-sm font-bold text-gray-300 leading-none">0</span>
+        </div>
+    </div>
+
+    <!-- 設定パネル -->
+    <div id="ui-panel" class="ui-panel">
+        <h1 class="text-lg font-bold mb-4 border-b border-orange-500/50 pb-2">Solar Architect</h1>
+
+        <div class="mb-4">
+            <div class="flex justify-between mb-1">
+                <label class="text-sm">惑星の質量</label>
+                <span id="mass-val" class="text-orange-400 font-bold">50</span>
+            </div>
+            <input type="range" id="mass-slider" min="1" max="500" value="50"
+                class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500">
+        </div>
+
+        <div class="mb-4 flex justify-between items-center bg-black/20 p-2 rounded text-xs">
+            <label class="text-gray-400">ズーム</label>
+            <span id="zoom-val" class="text-blue-400 font-bold">100%</span>
+        </div>
+
+        <div class="flex flex-col gap-2">
+            <button id="music-btn"
+                class="w-full py-2 bg-gray-800 hover:bg-gray-700 border border-transparent transition-all rounded-md font-bold text-sm flex items-center justify-center gap-2">
+                <span id="music-icon">🎵</span> <span id="music-text">BGM & Beat: OFF</span>
+            </button>
+            <button id="reset-btn"
+                class="w-full py-2 bg-gradient-to-r from-red-600 to-orange-600 rounded-md font-bold text-sm">
+                リセット
+            </button>
+        </div>
+    </div>
+
+    <!-- UIトグルボタン -->
+    <div id="ui-toggle" class="ui-toggle-btn">⚙️</div>
+
+    <div class="stats">
+        <p>Planets: <span id="planet-count" class="text-white">0</span> | <span id="fps-val">60</span> FPS</p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        (function () {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const massSlider = document.getElementById('mass-slider');
+            const massValDisplay = document.getElementById('mass-val');
+            const zoomValDisplay = document.getElementById('zoom-val');
+            const planetCountDisplay = document.getElementById('planet-count');
+            const totalScoreDisplay = document.getElementById('total-score');
+            const highScoreDisplay = document.getElementById('high-score');
+            const harmonyValDisplay = document.getElementById('harmony-val');
+            const harmonyBar = document.getElementById('harmony-bar');
+            const resetBtn = document.getElementById('reset-btn');
+            const musicBtn = document.getElementById('music-btn');
+            const uiPanel = document.getElementById('ui-panel');
+            const uiToggle = document.getElementById('ui-toggle');
+
+            const G = 1.5;
+            const STEPS_PER_FRAME = 2;
+            const PREDICTION_STEPS = 600;
+            const VELOCITY_SENSITIVITY = 0.18;
+
+            let bodies = [];
+            let isDragging = false;
+            let dragStart = { x: 0, y: 0 };
+            let dragCurrent = { x: 0, y: 0 };
+            let currentMass = 50;
+            let lastTime = 0;
+            let viewScale = 1.0;
+            const MIN_SCALE = 0.2;
+            const MAX_SCALE = 5.0;
+
+            // モバイルピンチズーム用
+            let lastTouchDist = 0;
+
+            // スコア関連
+            let totalScore = 0;
+            let highScore = 0;
+            let systemHarmony = 0;
+
+            // --- Audio Engine ---
+            let audioCtx = null;
+            let isMusicPlaying = false;
+            let musicTimer = null;
+            let step = 0;
+            let noiseBuffer = null;
+
+            const lofiScale = [[261.63, 329.63, 392.00, 493.88], [349.23, 440.00, 523.25, 659.25], [293.66, 349.23, 440.00, 523.25], [196.00, 246.94, 293.66, 392.00]];
+
+            function initAudio() {
+                if (audioCtx) return;
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const bufferSize = audioCtx.sampleRate * 2;
+                noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+            }
+
+            function playNote(freq, dur, vol = 0.05) {
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                const filter = audioCtx.createBiquadFilter();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(600, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+                osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + dur);
+            }
+
+            function playKick() {
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+            }
+
+            function playSnare() {
+                if (!audioCtx || !noiseBuffer) return;
+                const noise = audioCtx.createBufferSource(); noise.buffer = noiseBuffer;
+                const filter = audioCtx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
+                const gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.1, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+                noise.start(); noise.stop(audioCtx.currentTime + 0.2);
+            }
+
+            function playHiHat() {
+                if (!audioCtx || !noiseBuffer) return;
+                const noise = audioCtx.createBufferSource(); noise.buffer = noiseBuffer;
+                const filter = audioCtx.createBiquadFilter(); filter.type = 'highpass'; filter.frequency.setValueAtTime(7000, audioCtx.currentTime);
+                const gain = audioCtx.createGain(); gain.gain.setValueAtTime(0.04, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+                noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+                noise.start(); noise.stop(audioCtx.currentTime + 0.05);
+            }
+
+            function musicStep() {
+                if (!isMusicPlaying) return;
+                playHiHat();
+                if (step % 8 === 0) playKick();
+                if (step % 8 === 4) playSnare();
+                if (step % 16 === 0) {
+                    const chordIdx = (step / 16) % lofiScale.length;
+                    lofiScale[chordIdx].forEach(f => playNote(f * 0.5, 4, 0.03));
+                }
+                if (step % 4 === 2 && Math.random() > 0.5) {
+                    const chordIdx = Math.floor(step / 16) % lofiScale.length;
+                    playNote(lofiScale[chordIdx][Math.floor(Math.random() * 4)], 1.5, 0.015);
+                }
+                step = (step + 1) % 64;
+            }
+
+            function startMusic() {
+                initAudio();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                if (!isMusicPlaying) {
+                    isMusicPlaying = true;
+                    step = 0;
+                    musicTimer = setInterval(musicStep, 214);
+                    musicBtn.classList.add('btn-active');
+                    document.getElementById('music-text').innerText = "BGM & Beat: ON";
+                }
+            }
+
+            function toggleMusic() {
+                if (isMusicPlaying) {
+                    isMusicPlaying = false;
+                    clearInterval(musicTimer);
+                    musicBtn.classList.remove('btn-active');
+                    document.getElementById('music-text').innerText = "BGM & Beat: OFF";
+                } else { startMusic(); }
+            }
+
+            // --- Core ---
+            function initSystem() {
+                bodies = [];
+                const sun = { x: canvas.width / 2, y: canvas.height / 2, vx: 0, vy: 0, mass: 20000, radius: 40, color: '#ffaa00', isSun: true, tail: [] };
+                bodies.push(sun);
+                viewScale = 1.0; totalScore = 0; systemHarmony = 0;
+                updateZoomDisplay();
+            }
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                const sun = bodies.find(b => b.isSun);
+                if (sun) { sun.x = canvas.width / 2; sun.y = canvas.height / 2; }
+            }
+
+            window.addEventListener('resize', resize);
+            resize();
+
+            // ズーム（ホイール）
+            window.addEventListener('wheel', (e) => {
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                applyZoom(delta);
+            }, { passive: true });
+
+            function applyZoom(delta) {
+                const newScale = viewScale * delta;
+                if (newScale >= MIN_SCALE && newScale <= MAX_SCALE) {
+                    viewScale = newScale;
+                    updateZoomDisplay();
+                }
+            }
+
+            function updateZoomDisplay() {
+                zoomValDisplay.innerText = Math.round(viewScale * 100) + "%";
+            }
+
+            function screenToWorld(sx, sy) {
+                const cx = canvas.width / 2; const cy = canvas.height / 2;
+                return { x: (sx - cx) / viewScale + cx, y: (sy - cy) / viewScale + cy };
+            }
+
+            massSlider.oninput = (e) => {
+                currentMass = parseFloat(e.target.value);
+                massValDisplay.innerText = currentMass;
+            };
+
+            resetBtn.onclick = () => initSystem();
+            musicBtn.onclick = (e) => { e.stopPropagation(); toggleMusic(); };
+            uiToggle.onclick = (e) => {
+                e.stopPropagation();
+                uiPanel.classList.toggle('hidden-ui');
+                uiToggle.innerText = uiPanel.classList.contains('hidden-ui') ? '🛠️' : '⚙️';
+            };
+
+            // タッチ / マウス 入力共通化
+            function handleInputStart(x, y) {
+                if (!isMusicPlaying && !audioCtx) startMusic();
+                isDragging = true;
+                dragStart = { x, y };
+                dragCurrent = { x, y };
+            }
+
+            function handleInputMove(x, y) {
+                if (isDragging) dragCurrent = { x, y };
+            }
+
+            function handleInputEnd(ex, ey) {
+                if (!isDragging) return;
+                isDragging = false;
+                const worldPos = screenToWorld(dragStart.x, dragStart.y);
+                const vx = (dragStart.x - ex) * VELOCITY_SENSITIVITY / viewScale;
+                const vy = (dragStart.y - ey) * VELOCITY_SENSITIVITY / viewScale;
+                addPlanet(worldPos.x, worldPos.y, vx, vy, currentMass);
+            }
+
+            canvas.addEventListener('mousedown', (e) => handleInputStart(e.clientX, e.clientY));
+            window.addEventListener('mousemove', (e) => handleInputMove(e.clientX, e.clientY));
+            window.addEventListener('mouseup', (e) => handleInputEnd(e.clientX, e.clientY));
+
+            // タッチイベント (モバイル)
+            canvas.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
+                } else if (e.touches.length === 2) {
+                    isDragging = false; // 2本指時は配置をキャンセル
+                    lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                }
+            }, { passive: false });
+
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (e.touches.length === 1) {
+                    handleInputMove(e.touches[0].clientX, e.touches[0].clientY);
+                } else if (e.touches.length === 2) {
+                    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    const delta = dist / lastTouchDist;
+                    applyZoom(delta);
+                    lastTouchDist = dist;
+                }
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', (e) => {
+                if (isDragging) {
+                    handleInputEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+                }
+            });
+
+            function addPlanet(x, y, vx, vy, mass) {
+                const radius = Math.max(4, Math.pow(mass, 1 / 3) * 2.5);
+                const hue = Math.floor(Math.random() * 360);
+                const sun = bodies[0];
+                const dist = Math.sqrt((x - sun.x) ** 2 + (y - sun.y) ** 2);
+                bodies.push({ x, y, vx, vy, mass, radius, color: `hsl(${hue}, 80%, 65%)`, isSun: false, tail: [], minDist: dist, maxDist: dist });
+            }
+
+            function updatePhysics() {
+                const sun = bodies[0];
+                for (let s = 0; s < STEPS_PER_FRAME; s++) {
+                    for (let i = 0; i < bodies.length; i++) {
+                        let b1 = bodies[i];
+                        for (let j = i + 1; j < bodies.length; j++) {
+                            let b2 = bodies[j];
+                            const dx = b2.x - b1.x; const dy = b2.y - b1.y;
+                            const distSq = dx * dx + dy * dy; const dist = Math.sqrt(distSq);
+                            if (dist < b1.radius + b2.radius) { handleCollision(i, j); continue; }
+                            const force = (G * b1.mass * b2.mass) / distSq;
+                            const ax = (force * dx) / dist; const ay = (force * dy) / dist;
+                            if (!b1.isSun) { b1.vx += ax / b1.mass; b1.vy += ay / b1.mass; }
+                            if (!b2.isSun) { b2.vx -= ax / b2.mass; b2.vy -= ay / b2.mass; }
+                        }
+                    }
+                    for (let b of bodies) {
+                        if (!b.isSun) {
+                            b.x += b.vx; b.y += b.vy;
+                            const d = Math.sqrt((b.x - sun.x) ** 2 + (b.y - sun.y) ** 2);
+                            if (d < b.minDist) b.minDist = d; if (d > b.maxDist) b.maxDist = d;
+                        } else { b.x = canvas.width / 2; b.y = canvas.height / 2; }
+                    }
+                }
+
+                if (bodies.length > 1) {
+                    let harmonySum = 0;
+                    bodies.forEach(b => {
+                        if (b.isSun) return;
+                        const range = b.maxDist - b.minDist;
+                        const avgDist = (b.maxDist + b.minDist) / 2;
+                        harmonySum += Math.max(0, 1 - (range / (avgDist * 0.5)));
+                    });
+                    systemHarmony = (harmonySum / (bodies.length - 1)) * 100;
+                    totalScore += (bodies.length - 1) * (systemHarmony / 100) * 0.1;
+                } else systemHarmony = 0;
+
+                if (totalScore > highScore) highScore = totalScore;
+
+                bodies.forEach(b => {
+                    if (!b.isSun) { b.tail.push({ x: b.x, y: b.y }); if (b.tail.length > 120) b.tail.shift(); }
+                });
+
+                // UI反映
+                planetCountDisplay.innerText = bodies.length - 1;
+                totalScoreDisplay.innerText = Math.floor(totalScore);
+                highScoreDisplay.innerText = Math.floor(highScore);
+                harmonyValDisplay.innerText = Math.round(systemHarmony) + "%";
+                harmonyBar.style.width = systemHarmony + "%";
+            }
+
+            function handleCollision(i, j) {
+                const b1 = bodies[i]; const b2 = bodies[j];
+                totalScore = Math.max(0, totalScore - 50);
+                if (b1.isSun || b2.isSun) { if (b1.isSun) bodies.splice(j, 1); else bodies.splice(i, 1); return; }
+                if (b1.mass >= b2.mass) { b1.mass += b2.mass * 0.4; b1.radius = Math.max(b1.radius, Math.pow(b1.mass, 1 / 3) * 2.5); bodies.splice(j, 1); }
+                else { b2.mass += b1.mass * 0.4; b2.radius = Math.max(b2.radius, Math.pow(b2.mass, 1 / 3) * 2.5); bodies.splice(i, 1); }
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const sun = bodies.find(b => b.isSun); if (!sun) return;
+
+                ctx.save();
+                ctx.translate(canvas.width / 2, canvas.height / 2); ctx.scale(viewScale, viewScale); ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
+                // Sun Glow
+                const envGlow = ctx.createRadialGradient(sun.x, sun.y, 0, sun.x, sun.y, sun.radius * 15);
+                envGlow.addColorStop(0, 'rgba(255, 120, 0, 0.1)'); envGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = envGlow; ctx.fillRect(sun.x - sun.radius * 25, sun.y - sun.radius * 25, sun.radius * 50, sun.radius * 50);
+
+                // Trails
+                bodies.forEach(b => {
+                    if (b.isSun || b.tail.length < 2) return;
+                    ctx.beginPath(); ctx.strokeStyle = b.color; ctx.globalAlpha = 0.3;
+                    ctx.lineWidth = 1 / viewScale; ctx.moveTo(b.tail[0].x, b.tail[0].y);
+                    for (let p of b.tail) ctx.lineTo(p.x, p.y);
+                    ctx.stroke();
+                });
+
+                // Bodies
+                bodies.forEach(b => {
+                    ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fillStyle = b.color;
+                    if (b.isSun) {
+                        ctx.shadowBlur = 30; ctx.shadowColor = '#ff4400'; ctx.fill();
+                        ctx.fillStyle = '#fff000'; ctx.beginPath(); ctx.arc(b.x, b.y, b.radius * 0.85, 0, Math.PI * 2); ctx.fill();
+                        ctx.shadowBlur = 0;
+                    } else {
+                        ctx.fill();
+                        const angle = Math.atan2(b.y - sun.y, b.x - sun.x);
+                        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, angle - Math.PI / 2, angle + Math.PI / 2);
+                        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fill();
+                    }
+                });
+
+                // Prediction
+                if (isDragging) {
+                    const worldStart = screenToWorld(dragStart.x, dragStart.y);
+                    let t = { x: worldStart.x, y: worldStart.y, vx: (dragStart.x - dragCurrent.x) * VELOCITY_SENSITIVITY / viewScale, vy: (dragStart.y - dragCurrent.y) * VELOCITY_SENSITIVITY / viewScale, mass: currentMass };
+                    ctx.beginPath(); ctx.setLineDash([4 / viewScale, 4 / viewScale]); ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 1 / viewScale; ctx.moveTo(t.x, t.y);
+                    for (let i = 0; i < PREDICTION_STEPS; i++) {
+                        const dx = sun.x - t.x; const dy = sun.y - t.y; const distSq = dx * dx + dy * dy; const dist = Math.sqrt(distSq);
+                        if (dist < sun.radius) break;
+                        const f = (G * t.mass * sun.mass) / distSq;
+                        t.vx += (f * dx / dist) / t.mass; t.vy += (f * dy / dist) / t.mass; t.x += t.vx; t.y += t.vy;
+                        if (i % 8 === 0) ctx.lineTo(t.x, t.y);
+                    }
+                    ctx.stroke(); ctx.setLineDash([]);
+                }
+                ctx.restore();
+
+                // Screen space UI
+                if (isDragging) {
+                    ctx.beginPath(); ctx.strokeStyle = 'rgba(255, 165, 0, 0.7)'; ctx.lineWidth = 2;
+                    ctx.moveTo(dragStart.x, dragStart.y); ctx.lineTo(dragCurrent.x, dragCurrent.y); ctx.stroke();
+                }
+            }
+
+            function animate(time) {
+                const dt = time - lastTime; lastTime = time;
+                if (dt > 0) document.getElementById('fps-val').innerText = Math.round(1000 / dt);
+                updatePhysics(); draw(); requestAnimationFrame(animate);
+            }
+
+            window.onload = () => { initSystem(); requestAnimationFrame(animate); };
+        })();
+    </script>
+</body>
+
+</html>
