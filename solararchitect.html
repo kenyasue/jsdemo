@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Solar System Architect - Mobile Edition</title>
+    <title>Solar System Architect</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -21,7 +21,7 @@
             cursor: crosshair;
         }
 
-        /* 常に表示されるスコアHUD */
+        /* HUD Display */
         .hud-score {
             position: absolute;
             top: 20px;
@@ -40,7 +40,7 @@
             white-space: nowrap;
         }
 
-        /* 折りたたみ可能な設定パネル */
+        /* Settings Panel */
         .ui-panel {
             position: absolute;
             bottom: 20px;
@@ -63,7 +63,7 @@
             pointer-events: none;
         }
 
-        /* UI切り替えボタン */
+        /* UI Toggle Button */
         .ui-toggle-btn {
             position: absolute;
             bottom: 20px;
@@ -80,6 +80,30 @@
             z-index: 40;
             border: 2px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Modal Styles */
+        #start-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: rgba(20, 20, 30, 0.95);
+            border: 1px solid rgba(249, 115, 22, 0.4);
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 30px;
+            box-shadow: 0 0 50px rgba(249, 115, 22, 0.1);
         }
 
         .stats {
@@ -117,7 +141,51 @@
 
 <body>
 
-    <!-- スコアHUD (常に表示) -->
+    <!-- Startup Modal -->
+    <div id="start-modal">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold text-orange-500 mb-6 text-center">Solar System Architect</h2>
+
+            <div class="space-y-6 text-sm leading-relaxed">
+                <!-- English -->
+                <section>
+                    <h3 class="font-bold text-orange-300 border-b border-white/10 mb-2">English</h3>
+                    <ul class="list-disc ml-4 space-y-1">
+                        <li><strong>Drag & Launch:</strong> Launch planets into orbit.</li>
+                        <li><strong>Harmony:</strong> Maintain stable circular orbits to increase score.</li>
+                        <li><strong>Avoid Collisions:</strong> Crashing planets will decrease your score.</li>
+                    </ul>
+                </section>
+
+                <!-- Japanese -->
+                <section>
+                    <h3 class="font-bold text-orange-300 border-b border-white/10 mb-2">日本語 (Japanese)</h3>
+                    <ul class="list-disc ml-4 space-y-1">
+                        <li><strong>ドラッグで射出:</strong> 惑星を軌道に投げ込みましょう。</li>
+                        <li><strong>調和度:</strong> 安定した円軌道を維持するとスコアが上がります。</li>
+                        <li><strong>衝突を避ける:</strong> 惑星同士や太陽に衝突すると減点されます。</li>
+                    </ul>
+                </section>
+
+                <!-- Croatian -->
+                <section>
+                    <h3 class="font-bold text-orange-300 border-b border-white/10 mb-2">Hrvatski (Croatian)</h3>
+                    <ul class="list-disc ml-4 space-y-1">
+                        <li><strong>Povuci i Lansiraj:</strong> Lansiraj planete u orbitu.</li>
+                        <li><strong>Harmonija:</strong> Održavaj stabilne kružne orbite za veći rezultat.</li>
+                        <li><strong>Izbjegavaj sudare:</strong> Sudaranje planeta smanjuje tvoj rezultat.</li>
+                    </ul>
+                </section>
+            </div>
+
+            <button id="start-btn"
+                class="w-full mt-8 py-3 bg-gradient-to-r from-orange-600 to-red-600 rounded-full font-bold text-lg hover:from-orange-500 hover:to-red-500 transition-all shadow-lg shadow-orange-900/40">
+                START ARCHITECT
+            </button>
+        </div>
+    </div>
+
+    <!-- HUD Score (Always visible) -->
     <div class="hud-score">
         <div class="flex flex-col items-center">
             <span class="text-[10px] text-gray-400 uppercase tracking-tighter">Score</span>
@@ -140,13 +208,14 @@
         </div>
     </div>
 
-    <!-- 設定パネル -->
+    <!-- UI Panel -->
     <div id="ui-panel" class="ui-panel">
-        <h1 class="text-lg font-bold mb-4 border-b border-orange-500/50 pb-2">Solar Architect</h1>
+        <h1 class="text-lg font-bold mb-4 border-b border-orange-500/50 pb-2 uppercase tracking-wide">System Settings
+        </h1>
 
         <div class="mb-4">
             <div class="flex justify-between mb-1">
-                <label class="text-sm">惑星の質量</label>
+                <label class="text-sm">Planet Mass</label>
                 <span id="mass-val" class="text-orange-400 font-bold">50</span>
             </div>
             <input type="range" id="mass-slider" min="1" max="500" value="50"
@@ -154,27 +223,27 @@
         </div>
 
         <div class="mb-4 flex justify-between items-center bg-black/20 p-2 rounded text-xs">
-            <label class="text-gray-400">ズーム</label>
+            <label class="text-gray-400">Zoom Level</label>
             <span id="zoom-val" class="text-blue-400 font-bold">100%</span>
         </div>
 
         <div class="flex flex-col gap-2">
             <button id="music-btn"
                 class="w-full py-2 bg-gray-800 hover:bg-gray-700 border border-transparent transition-all rounded-md font-bold text-sm flex items-center justify-center gap-2">
-                <span id="music-icon">🎵</span> <span id="music-text">BGM & Beat: OFF</span>
+                <span id="music-icon">🎵</span> <span id="music-text">Music & Beat: OFF</span>
             </button>
             <button id="reset-btn"
                 class="w-full py-2 bg-gradient-to-r from-red-600 to-orange-600 rounded-md font-bold text-sm">
-                リセット
+                Reset System
             </button>
         </div>
     </div>
 
-    <!-- UIトグルボタン -->
+    <!-- UI Toggle Button -->
     <div id="ui-toggle" class="ui-toggle-btn">⚙️</div>
 
     <div class="stats">
-        <p>Planets: <span id="planet-count" class="text-white">0</span> | <span id="fps-val">60</span> FPS</p>
+        <p>Active Objects: <span id="planet-count" class="text-white">0</span> | <span id="fps-val">60</span> FPS</p>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -195,6 +264,8 @@
             const musicBtn = document.getElementById('music-btn');
             const uiPanel = document.getElementById('ui-panel');
             const uiToggle = document.getElementById('ui-toggle');
+            const startModal = document.getElementById('start-modal');
+            const startBtn = document.getElementById('start-btn');
 
             const G = 1.5;
             const STEPS_PER_FRAME = 2;
@@ -211,10 +282,7 @@
             const MIN_SCALE = 0.2;
             const MAX_SCALE = 5.0;
 
-            // モバイルピンチズーム用
             let lastTouchDist = 0;
-
-            // スコア関連
             let totalScore = 0;
             let highScore = 0;
             let systemHarmony = 0;
@@ -306,7 +374,7 @@
                     step = 0;
                     musicTimer = setInterval(musicStep, 214);
                     musicBtn.classList.add('btn-active');
-                    document.getElementById('music-text').innerText = "BGM & Beat: ON";
+                    document.getElementById('music-text').innerText = "Music & Beat: ON";
                 }
             }
 
@@ -315,7 +383,7 @@
                     isMusicPlaying = false;
                     clearInterval(musicTimer);
                     musicBtn.classList.remove('btn-active');
-                    document.getElementById('music-text').innerText = "BGM & Beat: OFF";
+                    document.getElementById('music-text').innerText = "Music & Beat: OFF";
                 } else { startMusic(); }
             }
 
@@ -338,7 +406,6 @@
             window.addEventListener('resize', resize);
             resize();
 
-            // ズーム（ホイール）
             window.addEventListener('wheel', (e) => {
                 const delta = e.deltaY > 0 ? 0.9 : 1.1;
                 applyZoom(delta);
@@ -374,8 +441,15 @@
                 uiToggle.innerText = uiPanel.classList.contains('hidden-ui') ? '🛠️' : '⚙️';
             };
 
-            // タッチ / マウス 入力共通化
+            // Modal Action
+            startBtn.onclick = () => {
+                startMusic();
+                startModal.style.display = 'none';
+            };
+
+            // Input Handlers
             function handleInputStart(x, y) {
+                if (startModal.style.display !== 'none') return;
                 if (!isMusicPlaying && !audioCtx) startMusic();
                 isDragging = true;
                 dragStart = { x, y };
@@ -399,17 +473,18 @@
             window.addEventListener('mousemove', (e) => handleInputMove(e.clientX, e.clientY));
             window.addEventListener('mouseup', (e) => handleInputEnd(e.clientX, e.clientY));
 
-            // タッチイベント (モバイル)
             canvas.addEventListener('touchstart', (e) => {
+                if (startModal.style.display !== 'none') return;
                 if (e.touches.length === 1) {
                     handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
                 } else if (e.touches.length === 2) {
-                    isDragging = false; // 2本指時は配置をキャンセル
+                    isDragging = false;
                     lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                 }
             }, { passive: false });
 
             canvas.addEventListener('touchmove', (e) => {
+                if (startModal.style.display !== 'none') return;
                 e.preventDefault();
                 if (e.touches.length === 1) {
                     handleInputMove(e.touches[0].clientX, e.touches[0].clientY);
@@ -478,7 +553,6 @@
                     if (!b.isSun) { b.tail.push({ x: b.x, y: b.y }); if (b.tail.length > 120) b.tail.shift(); }
                 });
 
-                // UI反映
                 planetCountDisplay.innerText = bodies.length - 1;
                 totalScoreDisplay.innerText = Math.floor(totalScore);
                 highScoreDisplay.innerText = Math.floor(highScore);
@@ -501,12 +575,10 @@
                 ctx.save();
                 ctx.translate(canvas.width / 2, canvas.height / 2); ctx.scale(viewScale, viewScale); ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
-                // Sun Glow
                 const envGlow = ctx.createRadialGradient(sun.x, sun.y, 0, sun.x, sun.y, sun.radius * 15);
                 envGlow.addColorStop(0, 'rgba(255, 120, 0, 0.1)'); envGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
                 ctx.fillStyle = envGlow; ctx.fillRect(sun.x - sun.radius * 25, sun.y - sun.radius * 25, sun.radius * 50, sun.radius * 50);
 
-                // Trails
                 bodies.forEach(b => {
                     if (b.isSun || b.tail.length < 2) return;
                     ctx.beginPath(); ctx.strokeStyle = b.color; ctx.globalAlpha = 0.3;
@@ -515,7 +587,6 @@
                     ctx.stroke();
                 });
 
-                // Bodies
                 bodies.forEach(b => {
                     ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fillStyle = b.color;
                     if (b.isSun) {
@@ -530,7 +601,6 @@
                     }
                 });
 
-                // Prediction
                 if (isDragging) {
                     const worldStart = screenToWorld(dragStart.x, dragStart.y);
                     let t = { x: worldStart.x, y: worldStart.y, vx: (dragStart.x - dragCurrent.x) * VELOCITY_SENSITIVITY / viewScale, vy: (dragStart.y - dragCurrent.y) * VELOCITY_SENSITIVITY / viewScale, mass: currentMass };
@@ -546,7 +616,6 @@
                 }
                 ctx.restore();
 
-                // Screen space UI
                 if (isDragging) {
                     ctx.beginPath(); ctx.strokeStyle = 'rgba(255, 165, 0, 0.7)'; ctx.lineWidth = 2;
                     ctx.moveTo(dragStart.x, dragStart.y); ctx.lineTo(dragCurrent.x, dragCurrent.y); ctx.stroke();
